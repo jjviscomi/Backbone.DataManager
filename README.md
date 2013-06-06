@@ -1,7 +1,7 @@
 Backbone-Manager
 ================
 
-Extension to Backbone, adds model and collection tracking, model recycling, and parent child tracking. Generates correct RESTful style routes for parent child relationships. This is in early development and has a long way to go! For more information checkout the source it is well documented.
+Extension to Backbone, adds model and collection tracking, model recycling, and parent child tracking. Generates correct RESTful style routes for parent/child relationships, and designed with Rails in mind. This is in early development and has a long way to go! For more information checkout the source it is well documented.
 
 
 
