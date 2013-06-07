@@ -4,7 +4,7 @@ Backbone-Manager
 Extension to Backbone, adds model and collection tracking, model recycling, and parent child tracking. Generates correct RESTful style routes for parent/child relationships, and designed with Rails in mind. This is in early development and has a long way to go! For more information checkout the source it is well documented.
 
 #Installation
- * Just make sure to include this file after Underscore and Backbone ... thats it.
+ * Just make sure to include the string.js.coffee then backbone-manager.js.coffee file after Underscore and Backbone ... thats it.
 
 #Backbone.Manager
 
