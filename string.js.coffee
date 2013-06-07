@@ -1,3 +1,4 @@
+# String helper methods
 String::toUnderscore = ->
   str = @.replace(/([A-Z])/g, (str)->
     "_" + str.toLowerCase()
