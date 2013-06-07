@@ -49,6 +49,7 @@ NEW MODEL METHODS
 OVER WRITEN MODEL METHODS
 
   * toJSON
+    * Works similar to Rails and nests the attributes in an object with the model name.
   * url
   * initalize
   
