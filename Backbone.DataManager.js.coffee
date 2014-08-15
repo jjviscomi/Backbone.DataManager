@@ -11,6 +11,10 @@
   _namesToKeys = {}
   _keysToNames = {}
 
+  # This will keep track on cache collections. It is a special type of collection
+  # That is intended to be used to reset a working collection if an update has occured on the server.
+  _caches = {}
+
   options = options || {}
 
   # Extend Backbone and Thorax
@@ -29,7 +33,6 @@
       Backbone.Collection::__class__ = 'Backbone.Collection'
       Backbone.Collection::__cache_key__ = null
       Backbone.Collection::__cache_key_gen__ = (data) ->
-        console.log "Backbone:", @, this
         if _.isUndefined(data) or _.isNull(data) or _.isEmpty(data)
           @['__cache_key__'] = SHA1.hash "#{_.result(@, 'url')}"
         else
@@ -40,7 +43,7 @@
       Thorax.Model::__class__ = 'Thorax.Model'
     if !_.isUndefined(Thorax.Collection)
       Thorax.Collection::__class__ = 'Thorax.Collection'
-    
+
 
   _getID = () ->
     _ids++
@@ -158,6 +161,7 @@
 
     data = options.data
     name = options.name
+    refresh = options.refresh
 
     key = _.result(collection, '__cache_key__')
 
@@ -170,6 +174,49 @@
     name = @.addName(key, name)
 
     _collections[key] = collection
+
+    if !_.isUndefined(refresh) or !_.isNull(refresh) and _.isNumber(refresh)
+      # Create a generic cache collection
+      if _.isUndefined(Thorax.Collection)
+        l_cache = new Backbone.Collection null,
+          'name': 'Cache'
+          'model': collection.model
+          '__cache_key__': key
+          'url': () ->
+            "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
+      else
+        l_cache = new Thorax.Collection null,
+          'name': 'Cache'
+          'model': collection.model
+          '__cache_key__': key
+          'url': () ->
+            "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
+
+      l_cache['name'] = 'Cache'
+      l_cache['model'] = collection.model
+      l_cache['__cache_key__'] = key
+      l_cache['url'] = () ->
+        "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
+
+      _caches[key] = 
+        'cache': l_cache
+        'refresh': refresh
+        'active': true
+        'interval': setInterval () => 
+          # console.log "Inspect: ", arguments, collection, key, @
+          if collection['models'].length > 0
+            l_cache.fetch
+              success: (cache, models) =>
+                collection.set models
+                cache.reset()
+              error: () =>
+                # Stop Refreshing if there is an error, change active to false
+                clearInterval(_caches[key]['interval'])
+                _caches[key]['active'] = false
+                console.log "Error: ", arguments
+          else
+            console.log "Parent Collection Not Cached Yet."
+        , refresh
 
     if _.isUndefined(name) or _.isNull(name) or _.isEmpty(name)
       return key
@@ -196,10 +243,18 @@
     _.each names, (name) =>
       @.removeName name
 
+    
+    @.stopCollectionAutoRefresh(key)
+    
+
     if !_.isNull(collection)
       delete _collections[key]
 
     collection
+
+  @.stopCollectionAutoRefresh = (key, options={}) ->
+    if _.has(_caches, key)
+      clearInterval _caches[key]['interval']
 
 
   # Working with Generic Objects
@@ -317,6 +372,12 @@
     _objects = {}
     _namesToKeys = {}
     _keysToNames = {}
+
+    # Need to systematically cancel all interval timers before doing this ...
+    _.each _caches, (cache) ->
+      clearInterval cache['interval']
+      
+    _caches = {}
 
   @.getKeys = () ->
     _.flatten [_.keys(_models), _.keys(_collections), _.keys(_objects)]
