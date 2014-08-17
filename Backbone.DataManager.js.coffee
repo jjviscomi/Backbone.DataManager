@@ -15,6 +15,12 @@
   # That is intended to be used to reset a working collection if an update has occured on the server.
   _caches = {}
 
+  _clockMethods = {}
+
+  # THIS IS THE AMOUNT OF TIME A CACHE IS PERSISTED ON THE SERVER WITHOUT NEW FETCHES BEING MADE TO IT
+  CACHE_TIMEOUT = 300
+
+
   options = options || {}
 
   # Extend Backbone and Thorax
@@ -76,6 +82,82 @@
     if _.has(_keysToNames, key)
       return _keysToNames[key]
     []
+
+  _addCollectionToAutoRefreshCacheStore = (collection,options={}) ->
+    data = options.data
+    name = options.name
+    refresh = options.refresh
+
+    key = _.result(collection, '__cache_key__')
+
+    if !_.isUndefined(refresh) or !_.isNull(refresh) and _.isNumber(refresh)
+      # Create a generic cache collection
+      if _.isUndefined(Thorax.Collection)
+        l_cache = new Backbone.Collection null,
+          'name': 'Cache'
+          'model': collection.model
+          '__cache_key__': key
+          'url': () ->
+            "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
+      else
+        l_cache = new Thorax.Collection null,
+          'name': 'Cache'
+          'model': collection.model
+          '__cache_key__': key
+          'url': () ->
+            "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
+
+      l_cache['name'] = 'Cache'
+      l_cache['model'] = collection.model
+      l_cache['__cache_key__'] = key
+      l_cache['url'] = () ->
+        "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
+
+
+      _caches[key] = 
+        'cache': l_cache
+        'refresh': refresh
+        '_nextRefreshIn': refresh
+        '_enabled': true
+        '_inProgress': false
+        '_error': false
+        '_refreshCount': 0
+        '_lastRequestTime': null
+        '_key': key
+        '_scheduled': false
+        '_refresh' : () =>
+          if !_caches[key]['_scheduled'] and !_caches[key]['_error'] and _caches[key]['_enabled'] and (_.isNull(_caches[key]['_lastRequestTime']) or (!_.isNull(_caches[key]['_lastRequestTime']) and (((new Date().getTime()) - _caches[key]['_lastRequestTime'])/1000) < 300))
+            _caches[key]['_scheduled'] = true
+            setTimeout () =>
+              # If we think the cache has expired STOP FETCHING!
+              if _.isNull(_caches[key]['_lastRequestTime']) or (!_.isNull(_caches[key]['_lastRequestTime']) and (((new Date().getTime()) - _caches[key]['_lastRequestTime'])/1000) < 300)
+                # We only want to fetch if there hasn't been an error, another fetch is not in progress, an the actual collection has already been fetched
+                if !_caches[key]['_error'] and !_caches[key]['_inProgress'] and (collection['models'].length > 0 or (!_.isUndefined(collection['_fetched']) and collection['_fetched']))
+                  
+                  _caches[key]['_lastRequestTime'] = new Date().getTime()
+                  _caches[key]['_inProgress'] = true
+                  _caches[key]['_nextRefreshIn'] += _caches[key]['_refreshCount'] * Math.sqrt(refresh)
+                  _caches[key]['_refreshCount'] += 1
+
+
+                  l_cache.fetch
+                    success: (cache, models) =>
+                      collection.set models
+                      cache.reset()
+                      _caches[key]['_inProgress'] = false
+                    error: () =>
+                      # Stop Refreshing if there is an error, change active to false
+                      _caches[key]['_inProgress'] = false
+                      _caches[key]['_error'] = true
+                      _caches[key]['_enabled'] = false
+              else
+                _caches[key]['_enabled'] = false
+
+              _caches[key]['_scheduled'] = false
+
+            , _.result(_caches[key], '_nextRefreshIn')
+
+    return _.has(_caches, key)
 
   # Method for adding a named refrence to a managed object
   @.addName = (key, name) ->
@@ -151,6 +233,43 @@
 
     model
 
+  @.enableAutoRefresh = (keyOrName,options={}) ->
+    if @.has(keyOrName)
+      collection = @.get keyOrName
+      # Make sure it is a collection
+      if !_.isUndefined(collection) and !_.isNull(collection) and !_.isUndefined(collection['__class__']) and (_.isEqual(collection['__class__'], 'Thorax.Collection') or _.isEqual(model['__class__'], 'Backbone.Collection'))
+        key = collection['__cache_key__']
+        # Make sure it has a key an the object is already registered into the cache
+        if !_.isUndefined(key) and !_.isNull(key) and !_.isUndefined(_caches[key]) and !_.isNull(_caches[key])
+          cache_obj = _caches[key]
+          _caches[key]['_enabled'] = true
+          if _.has(options, 'refresh') and _.isNumber(options.refresh)
+            _caches[key]['refresh'] = options.refresh
+          
+          _caches[key]['_nextRefreshIn'] = _caches[key]['refresh']
+          _caches[key]['_inProgress'] = false
+          _caches[key]['_error'] = false
+          _caches[key]['_lastRequestTime'] = null
+          _caches[key]['_scheduled'] = false
+
+          return true
+    return false
+
+  @.disableAutoRefresh = (keyOrName,options={}) ->
+    if @.has(keyOrName)
+      collection = @.get keyOrName
+      # Make sure it is a collection
+      if !_.isUndefined(collection) and !_.isNull(collection) and !_.isUndefined(collection['__class__']) and (_.isEqual(collection['__class__'], 'Thorax.Collection') or _.isEqual(model['__class__'], 'Backbone.Collection'))
+        key = collection['__cache_key__']
+        # Make sure it has a key an the object is already registered into the cache
+        if !_.isUndefined(key) and !_.isNull(key) and !_.isUndefined(_caches[key]) and !_.isNull(_caches[key])
+          cache_obj = _caches[key]
+          _caches[key]['_enabled'] = false
+          _caches[key]['_inProgress'] = false
+          _caches[key]['_error'] = false
+          _caches[key]['_scheduled'] = false
+          return true
+    return true
 
   # Working with Thorax.Collections or Backbone.Collections
   @.addCollection = (collection, options={}) ->
@@ -176,47 +295,7 @@
     _collections[key] = collection
 
     if !_.isUndefined(refresh) or !_.isNull(refresh) and _.isNumber(refresh)
-      # Create a generic cache collection
-      if _.isUndefined(Thorax.Collection)
-        l_cache = new Backbone.Collection null,
-          'name': 'Cache'
-          'model': collection.model
-          '__cache_key__': key
-          'url': () ->
-            "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
-      else
-        l_cache = new Thorax.Collection null,
-          'name': 'Cache'
-          'model': collection.model
-          '__cache_key__': key
-          'url': () ->
-            "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
-
-      l_cache['name'] = 'Cache'
-      l_cache['model'] = collection.model
-      l_cache['__cache_key__'] = key
-      l_cache['url'] = () ->
-        "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
-
-      _caches[key] = 
-        'cache': l_cache
-        'refresh': refresh
-        'active': true
-        'interval': setInterval () => 
-          # console.log "Inspect: ", arguments, collection, key, @
-          if collection['models'].length > 0
-            l_cache.fetch
-              success: (cache, models) =>
-                collection.set models
-                cache.reset()
-              error: () =>
-                # Stop Refreshing if there is an error, change active to false
-                clearInterval(_caches[key]['interval'])
-                _caches[key]['active'] = false
-                console.log "Error: ", arguments
-          else
-            console.log "Parent Collection Not Cached Yet."
-        , refresh
+      _addCollectionToAutoRefreshCacheStore(collection, options)
 
     if _.isUndefined(name) or _.isNull(name) or _.isEmpty(name)
       return key
@@ -244,17 +323,13 @@
       @.removeName name
 
     
-    @.stopCollectionAutoRefresh(key)
+    @.disableAutoRefresh key
     
 
     if !_.isNull(collection)
       delete _collections[key]
 
     collection
-
-  @.stopCollectionAutoRefresh = (key, options={}) ->
-    if _.has(_caches, key)
-      clearInterval _caches[key]['interval']
 
 
   # Working with Generic Objects
@@ -372,10 +447,6 @@
     _objects = {}
     _namesToKeys = {}
     _keysToNames = {}
-
-    # Need to systematically cancel all interval timers before doing this ...
-    _.each _caches, (cache) ->
-      clearInterval cache['interval']
       
     _caches = {}
 
@@ -397,6 +468,9 @@
 
     true
 
+  @.has = (keyOrName) ->
+    @.hasName(keyOrName) or @.hasKey(keyOrName)
+
   # Extend the Application object to have Backbone Event Functionality  
   _.extend @, Backbone.Events
 
@@ -411,4 +485,27 @@
   # Need to return the new Application from the constructor.
   @.initialize.call(@)
 
+  _.defer () =>
+    # Start the DataManager Clock
+    setInterval () =>
+      _.each _clockMethods, (method_obj, key, list) =>
+        method = method_obj.method
+        method_arguments = method_obj.args
+        method_callback  = method_obj.callback
+
+        if !_.isUndefined(method_callback) and _.isFunction(method_callback)
+          if !_.isUndefined(method_arguments) and _.isArray(method_arguments)
+            method_callback method.apply(@, method_arguments)
+          else
+            method_callback method.apply(@)
+        else
+          if !_.isUndefined(method_arguments) and _.isArray(method_arguments)
+            method.apply(@, method_arguments)
+          else
+            method.apply(@)
+      _.each _caches, (cache, key, list) =>
+        if !_.isUndefined(cache['_enabled']) and cache['_enabled']
+          cache['_refresh'].call(@)
+
+    , 61001
   @
