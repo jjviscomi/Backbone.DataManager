@@ -520,7 +520,6 @@
   _.defer () =>
     # Start the DataManager Clock
     setInterval () =>
-      console.log "clock_tick", arguments
       _.each _clockMethods, (method_obj, key, list) =>
         method = method_obj.method
         method_arguments = method_obj.args
@@ -537,7 +536,6 @@
           else
             method.apply(@)
       _.each _caches, (cache, key, list) =>
-        console.log "_cache:", key, cache
         if !_.isUndefined(cache['_enabled']) and cache['_enabled']
           cache['_refresh'].call(@)
 
