@@ -17,11 +17,10 @@
 
   _clockMethods = {}
 
-  # THIS IS THE AMOUNT OF TIME A CACHE IS PERSISTED ON THE SERVER WITHOUT NEW FETCHES BEING MADE TO IT
-  CACHE_TIMEOUT = 300
-
-
   options = options || {}
+
+  # THIS IS THE AMOUNT OF TIME A CACHE IS PERSISTED ON THE SERVER WITHOUT NEW FETCHES BEING MADE TO IT
+  CACHE_TIMEOUT = options.timeout || 300
 
   # Extend Backbone and Thorax
   if !_.isUndefined(Backbone) 
@@ -290,6 +289,19 @@
           _caches[key]['_scheduled'] = false
           return true
     return true
+
+  @.toggleAutoRefresh = (keyOrName,options={}) ->
+    if @.has(keyOrName)
+      collection = @.get keyOrName
+      # Make sure it is a collection
+      if !_.isUndefined(collection) and !_.isNull(collection) and !_.isUndefined(collection['__class__']) and (_.isEqual(collection['__class__'], 'Thorax.Collection') or _.isEqual(model['__class__'], 'Backbone.Collection'))
+        key = collection['__cache_key__']
+        # Make sure it has a key an the object is already registered into the cache
+        if !_.isUndefined(key) and !_.isNull(key) and !_.isUndefined(_caches[key]) and !_.isNull(_caches[key])
+          if _caches[key]['_enabled']
+            return @.disableAutoRefresh keyOrName
+          else
+            return @.enableAutoRefresh keyOrName
 
   # Working with Thorax.Collections or Backbone.Collections
   @.addCollection = (collection, options={}) ->
