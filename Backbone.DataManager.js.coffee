@@ -35,6 +35,7 @@
         else
           @['__cache_key__'] = SHA1.hash "#{_.result(@, 'url')}?#{$.param(data)}"
         return @['__cache_key__']
+      Backbone.Model::_fetched = false
     if !_.isUndefined(Backbone.Collection)
       Backbone.Collection::__class__ = 'Backbone.Collection'
       Backbone.Collection::__cache_key__ = null
@@ -44,12 +45,30 @@
         else
           @['__cache_key__'] = SHA1.hash "#{_.result(@, 'url')}?#{$.param(data)}"
         return @['__cache_key__']
+      Backbone.Collection::_fetched = false
+      Backbone.Collection::sync = (method, collection, options) ->
+        success = options.success
+        data    = options.data
+        # Save the data object
+        @._data = data
+
+        options.success = (resp) =>
+          # Things we want to do if there was a sucess
+          if !_.isUndefined(@['name']) and !_.isEqual(@.name, 'Cache')
+            @['__cache_key_gen__'](data)
+          @._fetched = true
+
+          # Things they want to do if there was a success
+          success(collection, resp, options) unless success
+
+        return Backbone.sync.apply @, arguments
+
   if !_.isUndefined(Thorax)
     if !_.isUndefined(Thorax.Model)
       Thorax.Model::__class__ = 'Thorax.Model'
     if !_.isUndefined(Thorax.Collection)
       Thorax.Collection::__class__ = 'Thorax.Collection'
-
+      Thorax.Collection::_fetched = false
 
   _getID = () ->
     _ids++
@@ -126,17 +145,18 @@
         '_key': key
         '_scheduled': false
         '_refresh' : () =>
+          # Don't Schedule it if there is somthing not right
           if !_caches[key]['_scheduled'] and !_caches[key]['_error'] and _caches[key]['_enabled'] and (_.isNull(_caches[key]['_lastRequestTime']) or (!_.isNull(_caches[key]['_lastRequestTime']) and (((new Date().getTime()) - _caches[key]['_lastRequestTime'])/1000) < 300))
             _caches[key]['_scheduled'] = true
             setTimeout () =>
               # If we think the cache has expired STOP FETCHING!
               if _.isNull(_caches[key]['_lastRequestTime']) or (!_.isNull(_caches[key]['_lastRequestTime']) and (((new Date().getTime()) - _caches[key]['_lastRequestTime'])/1000) < 300)
                 # We only want to fetch if there hasn't been an error, another fetch is not in progress, an the actual collection has already been fetched
-                if !_caches[key]['_error'] and !_caches[key]['_inProgress'] and (collection['models'].length > 0 or (!_.isUndefined(collection['_fetched']) and collection['_fetched']))
+                if !_caches[key]['_error'] and !_caches[key]['_inProgress'] and (!_.isUndefined(collection['_fetched']) and collection['_fetched'])
                   
                   _caches[key]['_lastRequestTime'] = new Date().getTime()
                   _caches[key]['_inProgress'] = true
-                  _caches[key]['_nextRefreshIn'] += _caches[key]['_refreshCount'] * Math.sqrt(refresh)
+                  _caches[key]['_nextRefreshIn'] += _caches[key]['_refreshCount'] * _caches[key]['_refreshCount'] * Math.sqrt(refresh)
                   _caches[key]['_refreshCount'] += 1
 
 
@@ -488,6 +508,7 @@
   _.defer () =>
     # Start the DataManager Clock
     setInterval () =>
+      console.log "clock_tick", arguments
       _.each _clockMethods, (method_obj, key, list) =>
         method = method_obj.method
         method_arguments = method_obj.args
@@ -504,6 +525,7 @@
           else
             method.apply(@)
       _.each _caches, (cache, key, list) =>
+        console.log "_cache:", key, cache
         if !_.isUndefined(cache['_enabled']) and cache['_enabled']
           cache['_refresh'].call(@)
 
