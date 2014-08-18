@@ -57,6 +57,10 @@
             @['__cache_key_gen__'](data)
           @._fetched = true
 
+          if !_.isUndefined(@['__cache_key__']) and !_.isEqual(@.name, 'Cache')
+            # This mean the fetch was called explicitly on the collection and we should refresh the rate
+            Backbone.DataManager.enableAutoRefresh @['__cache_key__']
+
           # Things they want to do if there was a success
           success(collection, resp, options) unless success
 
@@ -155,7 +159,7 @@
                   
                   _caches[key]['_lastRequestTime'] = new Date().getTime()
                   _caches[key]['_inProgress'] = true
-                  _caches[key]['_nextRefreshIn'] += _caches[key]['_refreshCount'] * _caches[key]['_refreshCount'] * Math.sqrt(refresh)
+                  _caches[key]['_nextRefreshIn'] += _caches[key]['_refreshCount'] * _caches[key]['_refreshCount'] * Math.sqrt(_caches[key]['_nextRefreshIn'])
                   _caches[key]['_refreshCount'] += 1
 
 
@@ -266,6 +270,7 @@
             _caches[key]['refresh'] = options.refresh
           
           _caches[key]['_nextRefreshIn'] = _caches[key]['refresh']
+          _caches[key]['_refreshCount'] = 1
           _caches[key]['_inProgress'] = false
           _caches[key]['_error'] = false
           _caches[key]['_lastRequestTime'] = null
