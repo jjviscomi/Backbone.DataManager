@@ -45,27 +45,6 @@
           @['__cache_key__'] = SHA1.hash "#{_.result(@, 'url')}?#{$.param(data)}"
         return @['__cache_key__']
       Backbone.Collection::_fetched = false
-      Backbone.Collection = Backbone.Collection.extend
-        'sync':(method, collection, options) ->
-          success = options.success
-          data    = options.data || {}
-
-          # Save the data object
-          @._data = data 
-
-          options.success = () =>
-            # Things we want to do if there was a sucess
-            if !_.isUndefined(@['name']) and !_.isEqual(@.name, 'Cache')
-              @['__cache_key_gen__'](data)
-            @._fetched = true
-
-            if !_.isUndefined(@['__cache_key__']) and !_.isEqual(@.name, 'Cache')
-              # This mean the fetch was called explicitly on the collection and we should refresh the rate
-              Backbone.DataManager.enableAutoRefresh @['__cache_key__']
-
-            success and success.apply @, arguments
-
-          Backbone.sync.apply @, arguments
 
   if !_.isUndefined(Thorax)
     if !_.isUndefined(Thorax.Model)
@@ -73,27 +52,7 @@
     if !_.isUndefined(Thorax.Collection)
       Thorax.Collection::__class__ = 'Thorax.Collection'
       Thorax.Collection::_fetched = false
-      Thorax.Collection = Thorax.Collection.extend
-        'sync':(method, collection, options) ->
-          success = options.success
-          data    = options.data || {}
 
-          # Save the data object
-          @._data = data 
-
-          options.success = () =>
-            # Things we want to do if there was a sucess
-            if !_.isUndefined(@['name']) and !_.isEqual(@.name, 'Cache')
-              @['__cache_key_gen__'](data)
-            @._fetched = true
-
-            if !_.isUndefined(@['__cache_key__']) and !_.isEqual(@.name, 'Cache')
-              # This mean the fetch was called explicitly on the collection and we should refresh the rate
-              Backbone.DataManager.enableAutoRefresh @['__cache_key__']
-
-            success and success.apply @, arguments
-
-          Thorax.sync.apply @, arguments
 
 
 
@@ -142,6 +101,7 @@
       if _.isUndefined(Thorax.Collection)
         l_cache = new Backbone.Collection null,
           'name': 'Cache'
+          '_cache':true
           'model': collection.model
           '__cache_key__': key
           'url': () ->
@@ -149,12 +109,14 @@
       else
         l_cache = new Thorax.Collection null,
           'name': 'Cache'
+          '_cache': true
           'model': collection.model
           '__cache_key__': key
           'url': () ->
             "/#{@.name.toUnderscore().toLowerCase()}/#{encodeURIComponent(@.__cache_key__)}"
 
       l_cache['name'] = 'Cache'
+      l_cache['_cache'] = true
       l_cache['model'] = collection.model
       l_cache['__cache_key__'] = key
       l_cache['url'] = () ->
