@@ -45,26 +45,27 @@
           @['__cache_key__'] = SHA1.hash "#{_.result(@, 'url')}?#{$.param(data)}"
         return @['__cache_key__']
       Backbone.Collection::_fetched = false
-      Backbone.Collection::sync = (method, collection, options) ->
-        success = options.success
-        data    = options.data
-        # Save the data object
-        @._data = data
+      Backbone.Collection = Backbone.Collection.extend
+        'sync':(method, collection, options) ->
+          success = options.success
+          data    = options.data || {}
 
-        options.success = (resp) =>
-          # Things we want to do if there was a sucess
-          if !_.isUndefined(@['name']) and !_.isEqual(@.name, 'Cache')
-            @['__cache_key_gen__'](data)
-          @._fetched = true
+          # Save the data object
+          @._data = data 
 
-          if !_.isUndefined(@['__cache_key__']) and !_.isEqual(@.name, 'Cache')
-            # This mean the fetch was called explicitly on the collection and we should refresh the rate
-            Backbone.DataManager.enableAutoRefresh @['__cache_key__']
+          options.success = () =>
+            # Things we want to do if there was a sucess
+            if !_.isUndefined(@['name']) and !_.isEqual(@.name, 'Cache')
+              @['__cache_key_gen__'](data)
+            @._fetched = true
 
-          # Things they want to do if there was a success
-          success(collection, resp, options) unless success
+            if !_.isUndefined(@['__cache_key__']) and !_.isEqual(@.name, 'Cache')
+              # This mean the fetch was called explicitly on the collection and we should refresh the rate
+              Backbone.DataManager.enableAutoRefresh @['__cache_key__']
 
-        return Backbone.sync.apply @, arguments
+            success and success.apply @, arguments
+
+          Backbone.sync.apply @, arguments
 
   if !_.isUndefined(Thorax)
     if !_.isUndefined(Thorax.Model)
@@ -72,6 +73,30 @@
     if !_.isUndefined(Thorax.Collection)
       Thorax.Collection::__class__ = 'Thorax.Collection'
       Thorax.Collection::_fetched = false
+      Thorax.Collection = Thorax.Collection.extend
+        'sync':(method, collection, options) ->
+          success = options.success
+          data    = options.data || {}
+
+          # Save the data object
+          @._data = data 
+
+          options.success = () =>
+            # Things we want to do if there was a sucess
+            if !_.isUndefined(@['name']) and !_.isEqual(@.name, 'Cache')
+              @['__cache_key_gen__'](data)
+            @._fetched = true
+
+            if !_.isUndefined(@['__cache_key__']) and !_.isEqual(@.name, 'Cache')
+              # This mean the fetch was called explicitly on the collection and we should refresh the rate
+              Backbone.DataManager.enableAutoRefresh @['__cache_key__']
+
+            success and success.apply @, arguments
+
+          Thorax.sync.apply @, arguments
+
+
+
 
   _getID = () ->
     _ids++
@@ -264,8 +289,9 @@
         key = collection['__cache_key__']
         # Make sure it has a key an the object is already registered into the cache
         if !_.isUndefined(key) and !_.isNull(key) and !_.isUndefined(_caches[key]) and !_.isNull(_caches[key])
-          cache_obj = _caches[key]
+
           _caches[key]['_enabled'] = true
+
           if _.has(options, 'refresh') and _.isNumber(options.refresh)
             _caches[key]['refresh'] = options.refresh
           
@@ -287,7 +313,6 @@
         key = collection['__cache_key__']
         # Make sure it has a key an the object is already registered into the cache
         if !_.isUndefined(key) and !_.isNull(key) and !_.isUndefined(_caches[key]) and !_.isNull(_caches[key])
-          cache_obj = _caches[key]
           _caches[key]['_enabled'] = false
           _caches[key]['_inProgress'] = false
           _caches[key]['_error'] = false
