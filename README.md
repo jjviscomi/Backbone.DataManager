@@ -106,4 +106,4 @@ Backbone.DataManager.get("Users").fetch({
 ```
 6. Computing the hash key is trivial, simply SHA1(url) for example: `http://localhost:5100/users` -> `e6ef7307a2fd72eff84c626a8699010841f0e61d` So the refresh requests will be made to: `http://localhost:5100/cache/e6ef7307a2fd72eff84c626a8699010841f0e61d` or with a data object you would hash `http://localhost:5100/users?from:2014-07-01&to:2014-07-31` This way the server never needs to tell the client what the key is for the cached data set.
 
-7. In our configurations we use background jobs to refresh the cache object every 30 seconds so if another user makes an update to the same dataset other clients will be given the updated data on the following refresh.
+7. In our configurations we use background jobs to refresh the cache object on a timed interval or record collection update, so if another user makes an update to the same dataset other clients will be given the updated data on the following refresh.
